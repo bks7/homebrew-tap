@@ -12,11 +12,14 @@ class KubernetesCli < Formula
     sha256 "ac6ea67a29a7e1b3581538c752097084734af77807831ed787084b081542a49f" => :el_capitan
   end
 
+  option "with-dynamic", "Build dynamic binary with CGO_ENABLED=1"
+
   # kubernetes-cli will not support go1.10 until version 1.11.x
   depends_on "go@1.9" => :build
 
   def install
     ENV["GOPATH"] = buildpath
+    ENV["CGO_ENABLED"] = "1" if build.with? "dynamic"
     arch = MacOS.prefer_64_bit? ? "amd64" : "x86"
     dir = buildpath/"src/k8s.io/kubernetes"
     dir.install buildpath.children - [buildpath/".brew_home"]
@@ -27,8 +30,12 @@ class KubernetesCli < Formula
       ENV.deparallelize { system "make", "generated_files" }
 
       # Make binary
-      system "make", "kubectl"
-      bin.install "_output/local/bin/darwin/#{arch}/kubectl"
+      ENV["KUBE_GO_PACKAGE"] = "k8s.io/kubernetes"
+      ENV["KUBE_GO_ROOT"] = Utils.popen_read("dirname "${BASH_SOURCE}"")
+      system "source", "hack/lib/version.sh"
+      ldflags = Utils.popen_read("kube::version::ldflags")
+      system "go", "install", "-ldflags", "#{ldflags}", "k8s.io/kubernetes/cmd/kubectl"
+      bin.install "#{buildpath}/bin/kubectl"
 
       # Install bash completion
       output = Utils.popen_read("#{bin}/kubectl completion bash")
