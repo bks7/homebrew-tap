@@ -19,7 +19,6 @@ class KubernetesCli < Formula
 
   def install
     ENV["GOPATH"] = buildpath
-    ENV["CGO_ENABLED"] = "1" if build.with? "dynamic"
     arch = MacOS.prefer_64_bit? ? "amd64" : "x86"
     dir = buildpath/"src/k8s.io/kubernetes"
     dir.install buildpath.children - [buildpath/".brew_home"]
@@ -30,12 +29,13 @@ class KubernetesCli < Formula
       ENV.deparallelize { system "make", "generated_files" }
 
       # Make binary
-      ENV["KUBE_GO_PACKAGE"] = "k8s.io/kubernetes"
-      ENV["KUBE_GO_ROOT"] = Utils.popen_read("dirname "${BASH_SOURCE}"")
-      system "source", "hack/lib/version.sh"
-      ldflags = Utils.popen_read("kube::version::ldflags")
-      system "go", "install", "-ldflags", "#{ldflags}", "k8s.io/kubernetes/cmd/kubectl"
-      bin.install "#{buildpath}/bin/kubectl"
+      if build.with? "dynamic"
+        ENV["CGO_ENABLED"] = "1"
+        inreplace "hack/lib/golang.sh", " kubectl", ""
+      end
+
+      system "make", "kubectl"
+      bin.install "_output/local/bin/darwin/#{arch}/kubectl"
 
       # Install bash completion
       output = Utils.popen_read("#{bin}/kubectl completion bash")
